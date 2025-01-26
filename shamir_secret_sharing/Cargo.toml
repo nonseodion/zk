@@ -1,0 +1,7 @@
+[package]
+name = "shamir_secret_sharing"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+polynomials = {path = "../polynomials"}
