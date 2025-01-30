@@ -1,14 +1,24 @@
 use ark_ff::PrimeField;
 use std::fmt::Debug;
+use std::io::Read;
 use std::iter::repeat_n;
+use std::marker::Copy; // TODO: implement copy
+use std::clone::Clone;
 
-#[derive(Debug)]  
-struct MultiLinear<F: PrimeField> {
-  hypercube: Vec<F>, // result from evaluating the boolean hypercube
+
+#[derive(Debug, Clone)]
+pub struct MultiLinear<F: PrimeField> {
+  pub hypercube: Vec<F>, // result from evaluating the boolean hypercube
 }
 
 impl <F: PrimeField>MultiLinear<F> {
-  fn partial_evaluate(self, value: F, index: u32) -> Self {
+  pub fn new(hypercube: Vec<F>) -> Self{
+    MultiLinear{
+      hypercube
+    }
+  }
+
+  pub fn partial_evaluate(&self, value: F, index: u32) -> Self {
     // let new_hypercube = iter:: ;
 
     let mut result: MultiLinear<F> = MultiLinear { hypercube: vec![] };
@@ -38,12 +48,13 @@ impl <F: PrimeField>MultiLinear<F> {
     return result;
   }
 
-  pub fn evaluate(self, values: Vec<Option<F>>) -> MultiLinear<F> {
+  pub fn evaluate(&self, values: Vec<Option<F>>) -> MultiLinear<F> {
       if 2_usize.pow(values.len() as u32) != self.hypercube.len() {
         println!("Polynomial is incorrect");
       }
-      
-      let mut intermediate_result: Self = self;
+      let mut hypercube = vec![];
+      hypercube.extend( &self.hypercube);
+      let mut intermediate_result = MultiLinear::new(hypercube);
 
       for (i, value) in values.iter().enumerate() {
         intermediate_result = match value {

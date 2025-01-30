@@ -1,10 +1,11 @@
 use std::ops::{Mul, Add};
 use std::fmt::Debug;
 use ark_ff::PrimeField;
+use std::iter::repeat_n;
 
 #[derive(Debug)]
-pub(crate) struct UnivariatePolynomial  <F: PrimeField> {
-    coefficients: Vec<F>
+pub struct UnivariatePolynomial  <F: PrimeField> {
+    pub coefficients: Vec<F>
 }
 
 impl <F: PrimeField>Mul for UnivariatePolynomial<F>{
@@ -57,7 +58,7 @@ impl <F: PrimeField>Add for UnivariatePolynomial<F> {
 }
 
 
-pub(crate) fn interpolate<F: PrimeField>(points: &Vec<(F, F)>) -> UnivariatePolynomial<F> {
+pub fn interpolate<F: PrimeField>(points: &Vec<(F, F)>) -> UnivariatePolynomial<F> {
 
     let mut polynomial = UnivariatePolynomial{ coefficients: vec![]};
 
@@ -77,6 +78,17 @@ pub(crate) fn interpolate<F: PrimeField>(points: &Vec<(F, F)>) -> UnivariatePoly
     }
 
     return polynomial;
+}
+
+pub fn evaluate<F: PrimeField>(polynomial: &UnivariatePolynomial<F>, x_value: F) -> F {
+    let mut result: F = polynomial.coefficients[0];
+    let mut x_value = x_value;
+    for i in 1..(polynomial.coefficients.len()) {
+        result += polynomial.coefficients[i] * x_value * F::from(i as u64);
+        x_value *= x_value;
+    }
+
+    return result;   
 }
 
 #[cfg(test)]

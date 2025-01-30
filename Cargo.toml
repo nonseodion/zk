@@ -1,2 +1,2 @@
 [workspace]
-members = ["polynomials", "shamir_secret_sharing"]
+members = ["polynomials", "shamir_secret_sharing", "sumcheck"]
