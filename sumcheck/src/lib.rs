@@ -42,19 +42,19 @@ impl<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> Sumcheck<F, H, T> {
         // clone the original polynomial to perform partial evaluation at random values using this polynomial
         let mut last_polynomial = self.original_polynomial.clone();
 
+        // using the points from the original polynomial get the points of a univariate polynomial 
+        // in the first variable for each variable
         for j in 0..rounds {
-
             let sum = last_polynomial.hypercube.iter().sum();
             // get univariate polynomial
             let mut univariate_polynomial = MultiLinear::new(vec![F::from(0), F::from(0)]);
             let poly_half_length = last_polynomial.hypercube.len()/2;
 
-            for i in 0..poly_half_length {
-                let zero_hypercube = last_polynomial.hypercube[i];
-                let one_hypercube = last_polynomial.hypercube[i+poly_half_length];
-                univariate_polynomial.hypercube[0] += zero_hypercube;
-                univariate_polynomial.hypercube[1] += one_hypercube; // same as constant
-            }
+            // get the univariate polynomial for the current first variable by summing the points on the 
+            // boolean hypercube where the variable is 0 and the points on the boolean hypercube where it is 1
+            univariate_polynomial.hypercube[0] = last_polynomial.hypercube.iter().take(poly_half_length).sum(); // points with first variable as 0
+            univariate_polynomial.hypercube[1] = last_polynomial.hypercube.iter().skip(poly_half_length).sum(); // points with first variable as 1
+
             self.polynomials.push(univariate_polynomial);
 
             let challenge = self.add_sum_and_univariate_polynomial_to_transcript(sum, j as usize);
@@ -62,12 +62,11 @@ impl<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> Sumcheck<F, H, T> {
             // add univariate polynomial to polynomial list
         }
 
-        // clear transcript to allow future calls start from an empty state.
+        // clear transcript to allow future calls start from an empty hasher state.
         self.transcript.clear();
     }
 
     fn verify_proof(&mut self) -> bool{
-
         if self.original_polynomial.hypercube.iter().sum::<F>() != self.sum {
             return false;
         }
@@ -77,10 +76,11 @@ impl<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> Sumcheck<F, H, T> {
         
         let len = self.polynomials.len();
         let mut challenges = vec![];
-        let mut claimed_sum: F = self.sum;
+        let mut claimed_sum: F = self.sum; // initial claimed sum is the sum of the original polynomial over the boolean hypercube
         let mut challenge;
 
-        // 
+        // check that each polynomial matches its claimed sum 
+        // by comparing the sum of the polynomial with the challenge substitution in the previous univariate polynomial
         for i in 0..len {
             if claimed_sum != self.polynomials[i].hypercube.iter().sum() {
                 return false;
@@ -100,7 +100,7 @@ impl<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> Sumcheck<F, H, T> {
             return false;
         }
         
-        // clear transcript to remove appended data
+        // clear transcript to allow future calls start from an empty hasher state.
         self.transcript.clear();
         return true;
     }
@@ -114,15 +114,15 @@ impl<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> Sumcheck<F, H, T> {
     }
 
     fn add_sum_and_univariate_polynomial_to_transcript (&mut self, sum: F, index: usize) -> F {
-            let polynomial = &self.polynomials[index];
-            // add sum and polynomial to previous transcript data and hash
-            let mut data = sum.into_bigint().to_bytes_be();
-            data.extend(polynomial.hypercube[0].into_bigint().to_bytes_be());
-            data.extend(polynomial.hypercube[1].into_bigint().to_bytes_be());
+        let polynomial = &self.polynomials[index];
+        // add sum and polynomial to previous transcript data and hash
+        let mut data = sum.into_bigint().to_bytes_be();
+        data.extend(polynomial.hypercube[0].into_bigint().to_bytes_be());
+        data.extend(polynomial.hypercube[1].into_bigint().to_bytes_be());
 
-            let challenge = F::from_be_bytes_mod_order(&mut self.transcript.append( &data ) );
+        let challenge = F::from_be_bytes_mod_order(&mut self.transcript.append( &data ) );
 
-            return challenge;
+        return challenge;
     }
 }
 
