@@ -48,7 +48,7 @@ impl <F: PrimeField>MultiLinear<F> {
     return result;
   }
 
-  pub fn evaluate(&self, values: Vec<Option<F>>) -> MultiLinear<F> {
+  pub fn evaluate(&self, values: &Vec<Option<F>>) -> MultiLinear<F> {
       if 2_usize.pow(values.len() as u32) != self.hypercube.len() {
         println!("Polynomial is incorrect");
       }
@@ -66,6 +66,8 @@ impl <F: PrimeField>MultiLinear<F> {
       intermediate_result
   }
 }
+
+
 
 
 #[cfg(test)]
@@ -97,17 +99,18 @@ mod tests {
     };    
 
     assert_eq!(
-      first.evaluate( vec![Some(Fq::from(4)), None, None, None]).hypercube,
-      vec![
-        Fq::from(0),
-        Fq::from(0),
-        Fq::from(12),
-        Fq::from(12),
-        Fq::from(20),
-        Fq::from(24),
-        Fq::from(32),
-        Fq::from(36)
-      ],
+      first.evaluate( 
+        &vec![Some(Fq::from(4)), None, None, None]).hypercube,
+        vec![
+          Fq::from(0),
+          Fq::from(0),
+          Fq::from(12),
+          Fq::from(12),
+          Fq::from(20),
+          Fq::from(24),
+          Fq::from(32),
+          Fq::from(36)
+        ],
     );
   }
 
@@ -127,7 +130,7 @@ mod tests {
     }; 
 
     assert_eq!(
-      first.evaluate(vec![
+      first.evaluate(&vec![
         Some(Fq::from(2)),
         Some(Fq::from(3)),
         Some(Fq::from(2))

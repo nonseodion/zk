@@ -93,7 +93,9 @@ impl<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> Sumcheck<F, H, T> {
         }
 
         let partial_evaluation = self.polynomials[len-1].partial_evaluate(challenges[len-1].unwrap(), 0).hypercube[0];
-        let evaluation = self.original_polynomial.evaluate(challenges).hypercube[0];
+
+        let _challenges = &challenges;
+        let evaluation = self.original_polynomial.evaluate(_challenges).hypercube[0];
 
         // oracle check
         if evaluation != partial_evaluation{
