@@ -1,14 +1,45 @@
 use ark_ff::PrimeField;
 use std::fmt::Debug;
-use std::io::Read;
 use std::iter::repeat_n;
 use std::marker::Copy; // TODO: implement copy
 use std::clone::Clone;
-
+use std::ops::{Add, Mul};
 
 #[derive(Debug, Clone)]
 pub struct MultiLinear<F: PrimeField> {
   pub hypercube: Vec<F>, // result from evaluating the boolean hypercube
+}
+
+impl <F: PrimeField> Add for MultiLinear<F> {
+    type Output = MultiLinear<F>;
+
+    fn add(self, other: MultiLinear<F>) -> MultiLinear<F> {
+      if self.hypercube.len() != other.hypercube.len() {
+        panic!("poly hypercube lengths are not equal");
+      }
+
+      let mut new_poly_hypercube = vec![];
+      for i in 0..self.hypercube.len() {
+        new_poly_hypercube.push(self.hypercube[i] + other.hypercube[i]);
+      }
+      MultiLinear::new(new_poly_hypercube)
+    }
+}
+
+impl <F: PrimeField> Mul for MultiLinear<F> {
+    type Output = MultiLinear<F>;
+
+    fn mul(self, other: MultiLinear<F>) -> MultiLinear<F> {
+      if self.hypercube.len() != other.hypercube.len() {
+        panic!("poly hypercube lengths are not equal");
+      }
+
+      let mut new_poly_hypercube = vec![];
+      for i in 0..self.hypercube.len() {
+        new_poly_hypercube.push(self.hypercube[i] * other.hypercube[i]);
+      }
+      MultiLinear::new(new_poly_hypercube)
+    }
 }
 
 impl <F: PrimeField>MultiLinear<F> {
@@ -20,7 +51,6 @@ impl <F: PrimeField>MultiLinear<F> {
 
   pub fn partial_evaluate(&self, value: F, index: u32) -> Self {
     // let new_hypercube = iter:: ;
-
     let mut result: MultiLinear<F> = MultiLinear { hypercube: vec![] };
     let skips: usize = 1 << index; // 2 ** index
     let mut new_index = 0;
@@ -67,12 +97,28 @@ impl <F: PrimeField>MultiLinear<F> {
   }
 }
 
+pub fn blow_up_right<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> MultiLinear<F>{
+  let mut new_poly_hypercube = get_blow_up_poly(poly, blows);
+  new_poly_hypercube = new_poly_hypercube.iter().enumerate().map( |x| { poly.hypercube[x.0 >> blows]}).collect();
+  MultiLinear::new(new_poly_hypercube)
+}
 
+pub fn blow_up_left<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> MultiLinear<F>{
+  let mut new_poly_hypercube = get_blow_up_poly(poly, blows);
+  let mask = poly.hypercube.len() - 1;
+  new_poly_hypercube = new_poly_hypercube.iter().enumerate().map( |x| poly.hypercube[x.0 & mask]).collect();
+  MultiLinear::new(new_poly_hypercube)
+}
 
+fn get_blow_up_poly<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> Vec<F>{
+  if poly.hypercube.len() % 2 != 0 {panic!("poly length is not a multiple of 2")};
+  let new_variable_len = 1 << (poly.hypercube.len().trailing_zeros() + blows);
+  vec![F::zero(); new_variable_len as usize]
+}
 
 #[cfg(test)]
 mod tests {
-    use super::MultiLinear;
+  use super::{blow_up_right, blow_up_left, MultiLinear};
     use ark_bn254::Fq;
 
   #[test]
@@ -136,6 +182,45 @@ mod tests {
         Some(Fq::from(2))
       ]).hypercube,
       vec![Fq::from(29)]
+    );
+  }
+
+  #[test]
+  fn test_add() {
+    // 2a + 3
+    let mut poly_a = MultiLinear::new(vec![3, 5].iter().map(|x| Fq::from(x.clone())).collect());
+    poly_a = blow_up_right(&poly_a, 2);
+
+    // 4b + 2a
+    let mut poly_b = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(x.clone())).collect());
+    poly_b = blow_up_right(&poly_b, 1);
+
+    // 3c + 2
+    let mut poly_c = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(x.clone())).collect());
+    poly_c = blow_up_left(&poly_c, 2);
+
+    // 4a + 4b+ 3c + 5
+    let result = poly_a + poly_b + poly_c;
+    assert_eq!(
+      result.hypercube,
+      vec![5, 8, 9, 12, 9, 12, 13, 16].iter().map(|x| Fq::from(x.clone())).collect::<Vec<Fq>>()
+    );
+  }
+
+  #[test]
+  fn test_multiply() {
+    // 4b + 2a
+    let mut poly_a = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(x.clone())).collect());
+    poly_a = blow_up_right(&poly_a, 1);
+
+    // 3c + 2
+    let mut poly_b = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(x.clone())).collect());
+    poly_b = blow_up_left(&poly_b, 2);
+
+    let result = poly_a * poly_b;
+    assert_eq!(
+      result.hypercube,
+      vec![0, 0, 8, 20, 4, 10, 12, 30].iter().map(|x| Fq::from(x.clone())).collect::<Vec<Fq>>()
     );
   }
 }
