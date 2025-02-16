@@ -81,13 +81,12 @@ pub fn interpolate<F: PrimeField>(points: &Vec<(F, F)>) -> UnivariatePolynomial<
 }
 
 pub fn evaluate<F: PrimeField>(polynomial: &UnivariatePolynomial<F>, x_value: F) -> F {
-    let mut result: F = polynomial.coefficients[0];
-    let mut x_value = x_value;
-    for i in 1..(polynomial.coefficients.len()) {
-        result += polynomial.coefficients[i] * x_value * F::from(i as u64);
-        x_value *= x_value;
+    let mut result: F = F::zero();
+    let length = polynomial.coefficients.len();
+    for i in 0..(length - 1 ) {
+        result = (result + polynomial.coefficients[length-i-1]) * x_value
     }
-
+    result = result + polynomial.coefficients[0];
     return result;   
 }
 
@@ -125,4 +124,11 @@ mod tests {
     )
   }  
 
+  #[test]
+  fn test_evaluate () {
+    // 16x2 + 40x + 82
+    let coefficients = vec![82, 40, 16].iter().map(|x| Fq::from(*x as u64)).collect();
+    let result = evaluate(&UnivariatePolynomial{coefficients}, Fq::from(2));
+    assert_eq!(result, Fq::from(226));
+  }
 }
