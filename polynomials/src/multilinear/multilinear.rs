@@ -49,7 +49,7 @@ impl <F: PrimeField>MultiLinear<F> {
     }
   }
 
-  pub fn partial_evaluate(&self, value: F, index: u32) -> Self {
+  pub fn partial_evaluate(&self, value: F, index: usize) -> Self {
     // let new_hypercube = iter:: ;
     let mut result: MultiLinear<F> = MultiLinear { hypercube: vec![] };
     let skips: usize = 1 << index; // 2 ** index
@@ -88,7 +88,7 @@ impl <F: PrimeField>MultiLinear<F> {
 
       for (i, value) in values.iter().enumerate() {
         intermediate_result = match value {
-          Some(_value) => intermediate_result.partial_evaluate(*_value, (values.len() - i - 1) as u32),
+          Some(_value) => intermediate_result.partial_evaluate(*_value, values.len() - i - 1),
           None => intermediate_result
         }
       }
