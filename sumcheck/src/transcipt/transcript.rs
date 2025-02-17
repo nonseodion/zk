@@ -2,16 +2,16 @@ use sha3::{Keccak256, Digest};
 use std::fmt::Debug;
 
 pub trait HashWrapper {
-  fn absorb(&mut self, data: &Vec<u8>) -> Vec<u8>;
+  fn absorb(&mut self, data: &Vec<u8>);
   fn squeeze(&self) -> Vec<u8>;
   fn clear(&mut self);
 }
 
 impl HashWrapper for Keccak256 {
-  fn absorb(&mut self, data: &Vec<u8>) -> Vec<u8> {
+  fn absorb(&mut self, data: &Vec<u8>) {
     self.update(data);
     // TODO try removing clone here
-    self.clone().finalize().to_vec()
+    self.clone().finalize().to_vec();
   }
 
   fn squeeze(&self) -> Vec<u8> {
@@ -26,13 +26,13 @@ impl HashWrapper for Keccak256 {
 
 pub trait TranscriptTrait<T: HashWrapper> {
   fn new(hasher: T) -> Self;
-  fn append(&mut self, data: &Vec<u8>) -> Vec<u8>;
-  fn hash(self) -> Vec<u8>;
+  fn absorb(&mut self, data: &Vec<u8>);
+  fn squeeze(&mut self) -> Vec<u8>;
   fn clear(&mut self);
 }
 
 #[derive(Debug)]
-pub(crate) struct Transcript<T: HashWrapper> {
+pub struct Transcript<T: HashWrapper> {
   hasher: T
 }
 
@@ -45,12 +45,14 @@ impl<T: HashWrapper> TranscriptTrait<T> for Transcript<T> {
   }
 
   // appends data and returns hash
-  fn append(&mut self, data: &Vec<u8>) -> Vec<u8> {
-    self.hasher.absorb(data)
+  fn absorb(&mut self, data: &Vec<u8>){
+    self.hasher.absorb(data);
   }
 
-  fn hash(self) -> Vec<u8> {
-    self.hasher.squeeze()
+  fn squeeze(&mut self) -> Vec<u8> {
+    let hash = self.hasher.squeeze();
+    self.hasher.absorb(&hash);
+    return hash;
   }
 
   fn clear(&mut self) {
