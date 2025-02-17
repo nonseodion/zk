@@ -116,9 +116,13 @@ fn get_blow_up_poly<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> Vec<F>{
   vec![F::zero(); new_variable_len as usize]
 }
 
+pub fn scalar_mul<F: PrimeField>(poly: &MultiLinear<F>, value: F) -> MultiLinear<F> {
+  MultiLinear::new(poly.hypercube.iter().map(|x| *x * value).collect())
+}
+
 #[cfg(test)]
 mod tests {
-  use super::{blow_up_right, blow_up_left, MultiLinear};
+  use super::{blow_up_left, blow_up_right, scalar_mul, MultiLinear};
     use ark_bn254::Fq;
 
   #[test]
@@ -222,5 +226,15 @@ mod tests {
       result.hypercube,
       vec![0, 0, 8, 20, 4, 10, 12, 30].iter().map(|x| Fq::from(x.clone())).collect::<Vec<Fq>>()
     );
+  }
+
+  #[test]
+  fn test_scalar_mul() {
+    let mut poly = MultiLinear::new(vec![Fq::from(2), Fq::from(3)]);
+    poly = scalar_mul(&poly, Fq::from(3));
+    assert_eq!(
+      poly.hypercube,
+      vec![Fq::from(6), Fq::from(9)]
+    )
   }
 }
