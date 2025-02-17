@@ -202,19 +202,19 @@ mod test {
     #[test]
     fn test_generate_partial_proof() {
         // 2a + 3
-        let mut poly_a = MultiLinear::new(vec![3, 5].iter().map(|x| Fq::from(x.clone())).collect());
+        let mut poly_a = MultiLinear::new(vec![3, 5].iter().map(|x| Fq::from(*x)).collect());
         poly_a = blow_up_right(&poly_a, 2);
 
         // 4b + 2a
-        let mut poly_b = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(x.clone())).collect());
+        let mut poly_b = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(*x)).collect());
         poly_b = blow_up_right(&poly_b, 1);
 
         // 3c + 2
-        let mut poly_c = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(x.clone())).collect());
+        let mut poly_c = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
         poly_c = blow_up_left(&poly_c, 2); 
 
         // 3c + 2
-        let mut poly_d = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(x.clone())).collect());
+        let mut poly_d = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
         poly_d = blow_up_left(&poly_d, 2);         
 
         let composite = Composite::new(
@@ -235,7 +235,7 @@ mod test {
 
         assert_eq!(
             sum,
-            composite.evaluate(&challenges.iter().map(|x| Some(x.clone())).collect())
+            composite.evaluate(&challenges.iter().map(|x| Some(*x)).collect())
         );
     }
 }

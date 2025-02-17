@@ -192,39 +192,39 @@ mod tests {
   #[test]
   fn test_add() {
     // 2a + 3
-    let mut poly_a = MultiLinear::new(vec![3, 5].iter().map(|x| Fq::from(x.clone())).collect());
+    let mut poly_a = MultiLinear::new(vec![3, 5].iter().map(|x| Fq::from(*x)).collect());
     poly_a = blow_up_right(&poly_a, 2);
 
     // 4b + 2a
-    let mut poly_b = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(x.clone())).collect());
+    let mut poly_b = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(*x)).collect());
     poly_b = blow_up_right(&poly_b, 1);
 
     // 3c + 2
-    let mut poly_c = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(x.clone())).collect());
+    let mut poly_c = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
     poly_c = blow_up_left(&poly_c, 2);
 
     // 4a + 4b+ 3c + 5
     let result = poly_a + poly_b + poly_c;
     assert_eq!(
       result.hypercube,
-      vec![5, 8, 9, 12, 9, 12, 13, 16].iter().map(|x| Fq::from(x.clone())).collect::<Vec<Fq>>()
+      vec![5, 8, 9, 12, 9, 12, 13, 16].iter().map(|x| Fq::from(*x)).collect::<Vec<Fq>>()
     );
   }
 
   #[test]
   fn test_multiply() {
     // 4b + 2a
-    let mut poly_a = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(x.clone())).collect());
+    let mut poly_a = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(*x)).collect());
     poly_a = blow_up_right(&poly_a, 1);
 
     // 3c + 2
-    let mut poly_b = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(x.clone())).collect());
+    let mut poly_b = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
     poly_b = blow_up_left(&poly_b, 2);
 
     let result = poly_a * poly_b;
     assert_eq!(
       result.hypercube,
-      vec![0, 0, 8, 20, 4, 10, 12, 30].iter().map(|x| Fq::from(x.clone())).collect::<Vec<Fq>>()
+      vec![0, 0, 8, 20, 4, 10, 12, 30].iter().map(|x| Fq::from(*x)).collect::<Vec<Fq>>()
     );
   }
 

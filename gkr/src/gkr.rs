@@ -70,7 +70,7 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
     // returns challenges and initial claimed sum
     let sum = generate_partial_proof(&f_poly, transcript, &mut round_polys, &mut challenges);
 
-    // let left = f_poly.evaluate(&challenges.iter().map(|x| Some(x.clone())).collect());
+    // let left = f_poly.evaluate(&challenges.iter().map(|x| Some(*x)).collect());
     // let points = round_polys.last().unwrap().iter().enumerate().map( |x| (F::from(x.0 as u64), x.1.clone())).collect::<Vec<(F, F)>>();
     // let univariate_poly = interpolate(&points);    
     // let right = evaluate(&univariate_poly, *challenges.last().unwrap());  
@@ -129,7 +129,7 @@ fn verify_proof<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circuit: 
     let sum;
     (sum, challenges) = verify_partial_proof(claimed_sums[i], &round_polys[i], transcript);
     
-    let evaluated_sum = f_poly.evaluate(&challenges.iter().map(|x| Some(x.clone())).collect());
+    let evaluated_sum = f_poly.evaluate(&challenges.iter().map(|x| Some(*x)).collect());
     if sum != evaluated_sum {
       return false;
     }
@@ -223,7 +223,7 @@ mod test {
       gates
     );
 
-    let inputs: Vec<Fq> = vec![ 1, 2, 3, 4 ].iter().map(|x| Fq::from(x.clone())).collect();
+    let inputs: Vec<Fq> = vec![ 1, 2, 3, 4 ].iter().map(|x| Fq::from(*x)).collect();
     let mut add_and_muls = vec![];
     get_add_and_muls(&circuit, &mut add_and_muls);
 
@@ -284,7 +284,7 @@ mod test {
       gates
     );
 
-    let inputs: Vec<Fq> = vec![ 1, 2, 3, 4, 5, 6, 7, 8 ].iter().map(|x| Fq::from(x.clone())).collect();
+    let inputs: Vec<Fq> = vec![ 1, 2, 3, 4, 5, 6, 7, 8 ].iter().map(|x| Fq::from(*x)).collect();
     
     let mut hasher = Keccak256::new();
     let mut transcript = Transcript::new(hasher);    

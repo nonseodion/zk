@@ -210,7 +210,7 @@ use ark_ff::AdditiveGroup;
   #[test]
   fn test_shunting_yard_algo(){
     let result = shunting_yard_algo(
-      &vec![2, 2, 3, 3, 3,  3, 7, 7].iter().map(|x| OP_ELEMENT::Value(Fq::from(x.clone()))).collect(),
+      &vec![2, 2, 3, 3, 3,  3, 7, 7].iter().map(|x| OP_ELEMENT::Value(Fq::from(*x))).collect(),
       &vec![OP::MUL, OP::MUL, OP::MUL, OP::MUL, OP::ADD, OP::MUL, OP::MUL]
     ).unwrap();
 
@@ -225,13 +225,13 @@ use ark_ff::AdditiveGroup;
   #[test]
   fn test_evaluate(){
     // (2a + 3b) * (4b + 7ab) + (2ab + 3b + 6a)
-    let poly_a = vec![0, 3, 2, 5].iter().map(|x| Fq::from(x.clone())).collect();
-    let poly_b = vec![0, 4, 0, 11].iter().map(|x| Fq::from(x.clone())).collect();
-    let poly_c = vec![0, 3, 6, 11].iter().map(|x| Fq::from(x.clone())).collect();
+    let poly_a = vec![0, 3, 2, 5].iter().map(|x| Fq::from(*x)).collect();
+    let poly_b = vec![0, 4, 0, 11].iter().map(|x| Fq::from(*x)).collect();
+    let poly_c = vec![0, 3, 6, 11].iter().map(|x| Fq::from(*x)).collect();
 
     let main_poly = Composite::new(&vec![poly_a, poly_b, poly_c], vec![OP::MUL, OP::ADD]);
     let result = main_poly.evaluate(
-      &vec![2, 3].iter().map(|x| Option::Some(Fq::from(x.clone()))).collect()
+      &vec![2, 3].iter().map(|x| Option::Some(Fq::from(*x))).collect()
     );
 
     assert_eq!(result, Fq::from(735));
@@ -239,16 +239,16 @@ use ark_ff::AdditiveGroup;
 
   #[test]
   fn test_reduce() {
-    let poly_a = vec![0, 3, 2, 5].iter().map(|x| Fq::from(x.clone())).collect();
-    let poly_b = vec![0, 4, 0, 11].iter().map(|x| Fq::from(x.clone())).collect();
-    let poly_c = vec![0, 3, 6, 11].iter().map(|x| Fq::from(x.clone())).collect();
+    let poly_a = vec![0, 3, 2, 5].iter().map(|x| Fq::from(*x)).collect();
+    let poly_b = vec![0, 4, 0, 11].iter().map(|x| Fq::from(*x)).collect();
+    let poly_c = vec![0, 3, 6, 11].iter().map(|x| Fq::from(*x)).collect();
 
     let main_poly = Composite::new(&vec![poly_a, poly_b, poly_c], vec![OP::MUL, OP::ADD]);
     let result = main_poly.reduce();
 
     assert_eq!(
       result.hypercube,
-      vec![0, 15, 6, 66].iter().map(|x| Fq::from(x.clone())).collect::<Vec<Fq>>()
+      vec![0, 15, 6, 66].iter().map(|x| Fq::from(*x)).collect::<Vec<Fq>>()
     );
   }
 }

@@ -38,12 +38,11 @@ impl <F: PrimeField> Circuit<F> {
     let mut layer_values = vec![vec![]; layers_len];
 
     let mut inputs = inputs.clone();
-    let mut outputs: Vec<F>;
     let mut index = 0;
 
     for layer_gate in self.gates.iter().rev() {
       // update outputs
-      outputs = vec![F::from(0); layer_gate.len()];
+      let mut outputs = vec![F::from(0); layer_gate.len()];
 
       for gate in layer_gate {
         let output = match gate.op{
@@ -89,7 +88,7 @@ mod test {
       gates
     );
 
-    let inputs = vec![ 1, 2, 3, 4 ].iter().map(|x| Fq::from(x.clone())).collect();
+    let inputs = vec![ 1, 2, 3, 4 ].iter().map(|x| Fq::from(*x)).collect();
     let output = [Fq::from(15)];
     assert_eq!(
       circuit.evaluate(&inputs)[0], 
@@ -117,7 +116,7 @@ mod test {
       gates
     );
 
-    let inputs = vec![ 1, 2, 3, 4, 5, 6, 7, 8 ].iter().map(|x| Fq::from(x.clone())).collect();
+    let inputs = vec![ 1, 2, 3, 4, 5, 6, 7, 8 ].iter().map(|x| Fq::from(*x)).collect();
     let output = [Fq::from(15), Fq::from(1680)];
     assert_eq!(
       circuit.evaluate(&inputs)[0], 
