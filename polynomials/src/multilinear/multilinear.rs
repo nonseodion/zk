@@ -22,7 +22,7 @@ impl <F: PrimeField> Add for MultiLinear<F> {
       for i in 0..self.hypercube.len() {
         new_poly_hypercube.push(self.hypercube[i] + other.hypercube[i]);
       }
-      MultiLinear::new(new_poly_hypercube)
+      MultiLinear::new(&new_poly_hypercube)
     }
 }
 
@@ -38,14 +38,14 @@ impl <F: PrimeField> Mul for MultiLinear<F> {
       for i in 0..self.hypercube.len() {
         new_poly_hypercube.push(self.hypercube[i] * other.hypercube[i]);
       }
-      MultiLinear::new(new_poly_hypercube)
+      MultiLinear::new(&new_poly_hypercube)
     }
 }
 
 impl <F: PrimeField>MultiLinear<F> {
-  pub fn new(hypercube: Vec<F>) -> Self{
+  pub fn new(hypercube: &Vec<F>) -> Self{
     MultiLinear{
-      hypercube
+      hypercube: hypercube.iter().map(|x| *x).collect()
     }
   }
 
@@ -84,7 +84,7 @@ impl <F: PrimeField>MultiLinear<F> {
       }
       let mut hypercube = vec![];
       hypercube.extend( &self.hypercube);
-      let mut intermediate_result = MultiLinear::new(hypercube);
+      let mut intermediate_result = MultiLinear::new(&hypercube);
 
       for (i, value) in values.iter().enumerate() {
         intermediate_result = match value {
@@ -100,14 +100,14 @@ impl <F: PrimeField>MultiLinear<F> {
 pub fn blow_up_right<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> MultiLinear<F>{
   let mut new_poly_hypercube = get_blow_up_poly(poly, blows);
   new_poly_hypercube = new_poly_hypercube.iter().enumerate().map( |x| { poly.hypercube[x.0 >> blows]}).collect();
-  MultiLinear::new(new_poly_hypercube)
+  MultiLinear::new(&new_poly_hypercube)
 }
 
 pub fn blow_up_left<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> MultiLinear<F>{
   let mut new_poly_hypercube = get_blow_up_poly(poly, blows);
   let mask = poly.hypercube.len() - 1;
   new_poly_hypercube = new_poly_hypercube.iter().enumerate().map( |x| poly.hypercube[x.0 & mask]).collect();
-  MultiLinear::new(new_poly_hypercube)
+  MultiLinear::new(&new_poly_hypercube)
 }
 
 fn get_blow_up_poly<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> Vec<F>{
@@ -117,7 +117,7 @@ fn get_blow_up_poly<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> Vec<F>{
 }
 
 pub fn scalar_mul<F: PrimeField>(poly: &MultiLinear<F>, value: F) -> MultiLinear<F> {
-  MultiLinear::new(poly.hypercube.iter().map(|x| *x * value).collect())
+  MultiLinear::new(&poly.hypercube.iter().map(|x| *x * value).collect())
 }
 
 #[cfg(test)]
@@ -192,15 +192,15 @@ mod tests {
   #[test]
   fn test_add() {
     // 2a + 3
-    let mut poly_a = MultiLinear::new(vec![3, 5].iter().map(|x| Fq::from(*x)).collect());
+    let mut poly_a = MultiLinear::new(&vec![3, 5].iter().map(|x| Fq::from(*x)).collect());
     poly_a = blow_up_right(&poly_a, 2);
 
     // 4b + 2a
-    let mut poly_b = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(*x)).collect());
+    let mut poly_b = MultiLinear::new(&vec![0, 4, 2, 6].iter().map(|x| Fq::from(*x)).collect());
     poly_b = blow_up_right(&poly_b, 1);
 
     // 3c + 2
-    let mut poly_c = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
+    let mut poly_c = MultiLinear::new(&vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
     poly_c = blow_up_left(&poly_c, 2);
 
     // 4a + 4b+ 3c + 5
@@ -214,11 +214,11 @@ mod tests {
   #[test]
   fn test_multiply() {
     // 4b + 2a
-    let mut poly_a = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(*x)).collect());
+    let mut poly_a = MultiLinear::new(&vec![0, 4, 2, 6].iter().map(|x| Fq::from(*x)).collect());
     poly_a = blow_up_right(&poly_a, 1);
 
     // 3c + 2
-    let mut poly_b = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
+    let mut poly_b = MultiLinear::new(&vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
     poly_b = blow_up_left(&poly_b, 2);
 
     let result = poly_a * poly_b;
@@ -230,7 +230,7 @@ mod tests {
 
   #[test]
   fn test_scalar_mul() {
-    let mut poly = MultiLinear::new(vec![Fq::from(2), Fq::from(3)]);
+    let mut poly = MultiLinear::new(&vec![Fq::from(2), Fq::from(3)]);
     poly = scalar_mul(&poly, Fq::from(3));
     assert_eq!(
       poly.hypercube,

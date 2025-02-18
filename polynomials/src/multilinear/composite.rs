@@ -81,7 +81,7 @@ impl <F: PrimeField> Composite<F> {
       panic!("ops length is not 1 less than hypercubes length");
     }
 
-    let polys = hypercubes.iter().map( |x| MultiLinear::new(x.to_vec())).collect();
+    let polys = hypercubes.iter().map( |x| MultiLinear::new(x)).collect();
     Composite {
       polys,
       ops
