@@ -36,12 +36,10 @@ pub fn generate_partial_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait
             index += 1;
         });
 
-
         let mut round_poly = vec![];
         for j in 0..(degree + 1) {
             round_poly.push(reduced_poly.hypercube.iter().skip(j * extra_points).take(extra_points).sum());
         }
-
         
         sum = round_poly[0] + round_poly[1];
         sums.push(sum);
@@ -57,14 +55,14 @@ pub fn generate_partial_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait
     sums[0]
 }
 
-pub fn verify_partial_proof<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (sum: F, polys: &Vec<Vec<F>>, transcript: &mut T) -> (F , Vec<F>) {
+pub fn verify_partial_proof<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (sum: F, polys: &Vec<Vec<F>>, transcript: &mut T) -> (F , Vec<F>, bool) {
     let mut challenges = vec![];
     let mut challenge;
     let mut sum = sum;
 
     for i in 0..polys.len() {
         if sum != polys[i][0] + polys[i][1] {
-            panic!("Invalid proof for partial sum check");
+            return (F::zero(), vec![], false);
         }
 
         let mut data = vec![sum];
@@ -77,7 +75,7 @@ pub fn verify_partial_proof<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>
         sum = evaluate(&univariate_poly, challenge);
     }
 
-    (sum, challenges)
+    (sum, challenges, true)
 }
 
     // adds the proof to the Sumcheck struct
@@ -98,7 +96,7 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (poly: 
     for j in 0..rounds {
         sums[j as usize] = last_polynomial.hypercube.iter().sum();
         // get univariate polynomial
-        let mut univariate_polynomial = MultiLinear::new(vec![F::from(0), F::from(0)]);
+        let mut univariate_polynomial = MultiLinear::new(&vec![F::from(0), F::from(0)]);
         let poly_half_length = last_polynomial.hypercube.len()/2;
 
         // get the univariate polynomial for the current first variable by summing the points on the 
@@ -177,7 +175,7 @@ mod test {
     #[test]
     fn test_generate_proof(){
         let polynomial = MultiLinear::new(
-            vec![
+            &vec![
                 Fq::from(0),
                 Fq::from(0),
                 Fq::from(0),
@@ -202,19 +200,19 @@ mod test {
     #[test]
     fn test_generate_partial_proof() {
         // 2a + 3
-        let mut poly_a = MultiLinear::new(vec![3, 5].iter().map(|x| Fq::from(*x)).collect());
+        let mut poly_a = MultiLinear::new(&vec![3, 5].iter().map(|x| Fq::from(*x)).collect());
         poly_a = blow_up_right(&poly_a, 2);
 
         // 4b + 2a
-        let mut poly_b = MultiLinear::new(vec![0, 4, 2, 6].iter().map(|x| Fq::from(*x)).collect());
+        let mut poly_b = MultiLinear::new(&vec![0, 4, 2, 6].iter().map(|x| Fq::from(*x)).collect());
         poly_b = blow_up_right(&poly_b, 1);
 
         // 3c + 2
-        let mut poly_c = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
+        let mut poly_c = MultiLinear::new(&vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
         poly_c = blow_up_left(&poly_c, 2); 
 
         // 3c + 2
-        let mut poly_d = MultiLinear::new(vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
+        let mut poly_d = MultiLinear::new(&vec![2, 5].iter().map(|x| Fq::from(*x)).collect());
         poly_d = blow_up_left(&poly_d, 2);         
 
         let composite = Composite::new(
@@ -231,7 +229,7 @@ mod test {
 
         let hasher = Keccak256::new();
         let mut transcript = Transcript::new(hasher);
-        let (sum, challenges) = verify_partial_proof(initial_sum, &round_polys, &mut transcript);
+        let (sum, challenges, _) = verify_partial_proof(initial_sum, &round_polys, &mut transcript);
 
         assert_eq!(
             sum,

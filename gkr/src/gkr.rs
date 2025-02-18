@@ -1,21 +1,19 @@
 use std::cmp::max;
-use std::iter::repeat_n;
-use std::ops::Mul;
 
 use polynomials::multilinear::composite::{Composite, OP as COMPOSITE_OP};
 use polynomials::multilinear::multilinear::{MultiLinear, blow_up_left, blow_up_right, scalar_mul};
-use polynomials::univariate::univariate::{evaluate, interpolate};
 use ark_ff::PrimeField;
 use crate::circut::{ Circuit, OP as CIRCUIT_OP, Gate};
 use sumcheck::transcipt::transcript::{ HashWrapper, TranscriptTrait, Transcript};
-use sumcheck::sumcheck::sumcheck::{add_data_to_transcript, generate_partial_proof, verify_partial_proof}; 
-// use sumcheck::
+use sumcheck::sumcheck::sumcheck::{add_data_to_transcript, generate_partial_proof, verify_partial_proof};
+use polynomials::univariate::univariate::{evaluate, interpolate };
 
 #[derive(Debug)]
 struct GKR_PROOF<F: PrimeField> {
   claimed_sums: Vec<F>,
   round_polys: Vec<Vec<Vec<F>>>,
-  layers: Vec<Vec<F>>
+  evaluations: Vec<(F, F)>,
+  output: Vec<F>
 }
 
 fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circuit: &mut Circuit<F>, inputs: &Vec<F>, transcript: &mut T) -> GKR_PROOF<F> {
@@ -23,7 +21,8 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
   let mut gkr_proof = GKR_PROOF{
     claimed_sums: vec![],
     round_polys: vec![],
-    layers: vec![]
+    evaluations: vec![],
+    output: vec![]
   };
 
   let mut add_and_muls = vec![];
@@ -31,7 +30,7 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
 
   let mut _w = circuit.layers[0].clone();
   if _w.len() == 1 { _w = vec![_w[0], F::zero()]; }
-  let mut w_i = MultiLinear::new(_w);
+  let w_i = MultiLinear::new(&_w);
 
   let challenges_length = next_pow_of_2(w_i.hypercube.len()) * 2;  
   let mut challenges = vec![F::zero(); challenges_length];
@@ -39,49 +38,55 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
   challenges = challenges.iter().map(|_| F::from_be_bytes_mod_order(&transcript.squeeze())).collect();
 
   for i in 0..circuit.gates.len() {
-    
     let (mut add_poly, mut mul_poly) = add_and_muls[i].clone();
     
-    let w_i_plus_1 = MultiLinear::new(circuit.layers[i+1].clone());
+    let w_i_plus_1 = MultiLinear::new(&circuit.layers[i+1]);
     let blows = next_pow_of_2(w_i_plus_1.hypercube.len()) as u32;
     // blow ups
     let w_b = blow_up_right(&w_i_plus_1, blows); // blow up for c
     let w_c = blow_up_left(&w_i_plus_1, blows); // blow up for b
-    let w_plus = w_b.clone() + w_c.clone();
-    let w_mul = w_b.clone() * w_c.clone();
+    let w_plus = MultiLinear::new(&w_b.hypercube) + MultiLinear::new(&w_c.hypercube);
+    let w_mul = MultiLinear::new(&w_b.hypercube) * MultiLinear::new(&w_c.hypercube);
 
     let alpha = F::from_be_bytes_mod_order(&transcript.squeeze());
     let beta = F::from_be_bytes_mod_order(&transcript.squeeze());
 
-    // let sum = scalar_mul(&w_i.evaluate(&vec![Some(challenges[0])]), alpha) 
-    //   + scalar_mul(&w_i.evaluate(&vec![Some(challenges[1])]), beta);
-
-    apply_alpha_beta(alpha, beta, &challenges, &mul_poly.clone(), &mut mul_poly);
-    apply_alpha_beta(alpha, beta, &challenges, &add_poly.clone(), &mut add_poly);
+    mul_poly = apply_alpha_beta(alpha, beta, &challenges, &mul_poly);
+    add_poly = apply_alpha_beta(alpha, beta, &challenges, &add_poly);
     
-    let hypercubes = vec![ add_poly, w_plus, mul_poly, w_mul].iter().map(|x| x.hypercube.clone()).collect();
+    let hypercubes = vec![ 
+      add_poly, 
+      MultiLinear::new(&w_plus.hypercube), 
+      mul_poly, 
+      MultiLinear::new(&w_mul.hypercube)
+    ].iter().map(|x| x.hypercube.clone()).collect();
+
     let f_poly = Composite::new(
       &hypercubes,
       vec![COMPOSITE_OP::MUL, COMPOSITE_OP::ADD, COMPOSITE_OP::MUL]
     );
     let mut round_polys = vec![];
     challenges = vec![];
-
     // returns challenges and initial claimed sum
     let sum = generate_partial_proof(&f_poly, transcript, &mut round_polys, &mut challenges);
 
-    // let left = f_poly.evaluate(&challenges.iter().map(|x| Some(*x)).collect());
-    // let points = round_polys.last().unwrap().iter().enumerate().map( |x| (F::from(x.0 as u64), x.1.clone())).collect::<Vec<(F, F)>>();
-    // let univariate_poly = interpolate(&points);    
-    // let right = evaluate(&univariate_poly, *challenges.last().unwrap());  
-    // dbg!(left); dbg!(right);
+    let evaluations = (
+      w_plus.evaluate(&challenges.iter().map(|x| Some(*x)).collect()).hypercube[0],
+      w_mul.evaluate(&challenges.iter().map(|x| Some(*x)).collect()).hypercube[0],
+    );
+
+    let left = f_poly.evaluate(&challenges.iter().map(|x| Some(*x)).collect());
+    let points = round_polys.last().unwrap().iter().enumerate().map( |x| (F::from(x.0 as u64), x.1.clone())).collect::<Vec<(F, F)>>();
+    let univariate_poly = interpolate(&points);    
+    let right = evaluate(&univariate_poly, *challenges.last().unwrap());  
+    dbg!(left); dbg!(right);
 
     gkr_proof.claimed_sums.push(sum);
     gkr_proof.round_polys.push(round_polys);
-    gkr_proof.layers.push(w_i.hypercube.clone());
-
-    w_i = w_i_plus_1;
+    gkr_proof.evaluations.push(evaluations);
   }
+
+  gkr_proof.output = circuit.layers[0].clone();
 
   gkr_proof
 }
@@ -90,49 +95,59 @@ fn verify_proof<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circuit: 
 
   let mut add_and_muls = vec![];
   get_add_and_muls(&circuit, &mut add_and_muls);
-  let layers = gkr_proof.layers;
+
+  let evaluations = gkr_proof.evaluations;
   let claimed_sums = gkr_proof.claimed_sums;
   let round_polys = gkr_proof.round_polys;
 
-  let mut _w = circuit.layers[0].clone();
-  if _w.len() == 1 { _w = vec![_w[0], F::zero()]; }
-  let mut w_i = MultiLinear::new(_w);
+  let mut _w = gkr_proof.output;
+  if _w.len() == 1 { _w.push(F::zero()) }
+  let w_i = MultiLinear::new(&_w);
 
   let challenges_length = next_pow_of_2(w_i.hypercube.len()) * 2;  
   let mut challenges = vec![F::zero(); challenges_length];
   add_data_to_transcript(&w_i.hypercube, transcript);
   challenges = challenges.iter().map(|_| F::from_be_bytes_mod_order(&transcript.squeeze())).collect();  
 
+  let last_index = circuit.gates.len()-1;
   for i in 0..circuit.gates.len(){
-    let (mut add_poly, mut mul_poly) = add_and_muls[i].clone();
-    
-    let w_i_plus_1 = MultiLinear::new(circuit.layers[i+1].clone());
-    let blows = next_pow_of_2(w_i_plus_1.hypercube.len()) as u32;
-    // blow ups
-    let w_b = blow_up_right(&w_i_plus_1, blows); // blow up for c
-    let w_c = blow_up_left(&w_i_plus_1, blows); // blow up for b
-    let w_plus = w_b.clone() + w_c.clone();
-    let w_mul = w_b.clone() * w_c.clone();
-
+    // follows order of transcript call to ensure it gets the same challenges as prover
     let alpha = F::from_be_bytes_mod_order(&transcript.squeeze());
-    let beta = F::from_be_bytes_mod_order(&transcript.squeeze());
+    let beta = F::from_be_bytes_mod_order(&transcript.squeeze());    
 
-    apply_alpha_beta(alpha, beta, &challenges, &mul_poly.clone(), &mut mul_poly);
-    apply_alpha_beta(alpha, beta, &challenges, &add_poly.clone(), &mut add_poly);
+    let (sum, new_challenges, success) = verify_partial_proof(claimed_sums[i], &round_polys[i], transcript);
+    if !success {return false};
+    let (mut add_poly, mut mul_poly) = add_and_muls[i].clone();
 
-    let hypercubes = vec![ add_poly, w_plus, mul_poly, w_mul].iter().map(|x| x.hypercube.clone()).collect();
-    let f_poly = Composite::new(
-      &hypercubes,
-      vec![COMPOSITE_OP::MUL, COMPOSITE_OP::ADD, COMPOSITE_OP::MUL]
+    let (w_plus, w_mul);
+    if i < last_index {
+      (w_plus, w_mul) = evaluations[i];
+    } else {
+      let w_inputs = MultiLinear::new(&inputs);
+      let challenges_len = new_challenges.len() / 2;
+      let b_challenges = new_challenges.iter().take(challenges_len).map(|x| Some(*x)).collect();
+      let c_challenges = new_challenges.iter().skip(challenges_len).take(challenges_len).map(|x| Some(*x)).collect();
+      let w_b = w_inputs.evaluate(&b_challenges).hypercube[0];
+      let w_c = w_inputs.evaluate(&c_challenges).hypercube[0];
+      (w_plus, w_mul) = (w_b + w_c, w_b * w_c);
+    }
+
+    mul_poly = scalar_mul(
+      &apply_alpha_beta(alpha, beta, &challenges, &mul_poly),
+      w_mul
+    );
+    add_poly = scalar_mul(
+      &apply_alpha_beta(alpha, beta, &challenges, &add_poly),
+      w_plus
     );
 
-    let sum;
-    (sum, challenges) = verify_partial_proof(claimed_sums[i], &round_polys[i], transcript);
-    
-    let evaluated_sum = f_poly.evaluate(&challenges.iter().map(|x| Some(*x)).collect());
+    let f_poly = mul_poly + add_poly;
+    let evaluated_sum = f_poly.evaluate(&new_challenges.iter().map(|x| Some(*x)).collect()).hypercube[0];
     if sum != evaluated_sum {
       return false;
     }
+    dbg!(sum, evaluated_sum);
+    challenges = new_challenges;
   }
 
   // let points = round_polys[1].iter().enumerate().map( |x| (F::from(x.0 as u64), x.1.clone())).collect::<Vec<(F, F)>>();
@@ -168,7 +183,7 @@ fn get_add_and_muls<F: PrimeField> (circuit: &Circuit<F>, add_and_muls: &mut Vec
       }
     }
 
-    add_and_muls.push((MultiLinear::new(add_poly), MultiLinear::new(mul_poly)));
+    add_and_muls.push((MultiLinear::new(&add_poly), MultiLinear::new(&mul_poly)));
 
     // f_polys.push(FPOLY::new(mul_poly, add_poly, layer.clone()))
   }  
@@ -179,7 +194,7 @@ fn next_pow_of_2 (no: usize) -> usize {
   toOne((no as f64).log2().ceil() as usize)
 }
 
-fn apply_alpha_beta <F: PrimeField> (alpha: F, beta: F, challenges: &Vec<F>, former_op_poly: &MultiLinear<F>, new_poly: &mut MultiLinear<F>) {
+fn apply_alpha_beta <F: PrimeField> (alpha: F, beta: F, challenges: &Vec<F>, former_op_poly: &MultiLinear<F>) -> MultiLinear<F> {
   let no_of_challenges = challenges.len()/2;
   let mut polys = vec![];
 
@@ -196,7 +211,7 @@ fn apply_alpha_beta <F: PrimeField> (alpha: F, beta: F, challenges: &Vec<F>, for
     polys.push(former_op_poly.evaluate(&_challenges));
   }
 
-  *new_poly = scalar_mul(&polys[0], alpha) + scalar_mul(&polys[1], beta);
+  scalar_mul(&polys[0], alpha) + scalar_mul(&polys[1], beta)
 }
 
 
@@ -251,9 +266,9 @@ mod test {
   // 4b + 2a
   #[test]
   fn test_apply_alpha_beta() {
-    let poly = MultiLinear::new(vec![0, 4, 3, 7, 2, 6, 5, 9].iter().map(|x| Fq::from(*x)).collect());
-    let mut new_poly: MultiLinear<Fq> = MultiLinear::new(vec![]);
-    apply_alpha_beta(Fq::from(2), Fq::from(3), &vec![Fq::from(2), Fq::from(3)], &poly, &mut new_poly);
+    let poly = MultiLinear::new(&vec![0, 4, 3, 7, 2, 6, 5, 9].iter().map(|x| Fq::from(*x)).collect());
+    let new_poly: MultiLinear<Fq> = 
+      apply_alpha_beta(Fq::from(2), Fq::from(3), &vec![Fq::from(2), Fq::from(3)], &poly);
 
     assert_eq!(
       new_poly.hypercube,
