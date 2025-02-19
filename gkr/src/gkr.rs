@@ -29,10 +29,14 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
   get_add_and_muls(&circuit, &mut add_and_muls);
 
   let mut _w = circuit.layers[0].clone();
+
+  // This code starts applying the 2-1 trick with alpha-beta from the first layer and not the second layer.
+  // This first layer needs to have at least 2 evaluation points to be a valid polynomial and be usable with alpha-beta.
+  // If the first layer is one value, the next line converts it to an array with two values.
   if _w.len() == 1 { _w = vec![_w[0], F::zero()]; }
   let w_i = MultiLinear::new(&_w);
 
-  let challenges_length = next_pow_of_2(w_i.hypercube.len()) * 2;  
+  let challenges_length = next_pow_of_2(w_i.hypercube.len()) * 2;
   let mut challenges = vec![F::zero(); challenges_length];
   add_data_to_transcript(&w_i.hypercube, transcript);
   challenges = challenges.iter().map(|_| F::from_be_bytes_mod_order(&transcript.squeeze())).collect();
@@ -73,13 +77,7 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
     let evaluations = (
       w_plus.evaluate(&challenges.iter().map(|x| Some(*x)).collect()).hypercube[0],
       w_mul.evaluate(&challenges.iter().map(|x| Some(*x)).collect()).hypercube[0],
-    );
-
-    let left = f_poly.evaluate(&challenges.iter().map(|x| Some(*x)).collect());
-    let points = round_polys.last().unwrap().iter().enumerate().map( |x| (F::from(x.0 as u64), x.1.clone())).collect::<Vec<(F, F)>>();
-    let univariate_poly = interpolate(&points);    
-    let right = evaluate(&univariate_poly, *challenges.last().unwrap());  
-    dbg!(left); dbg!(right);
+    );  
 
     gkr_proof.claimed_sums.push(sum);
     gkr_proof.round_polys.push(round_polys);
@@ -112,6 +110,7 @@ fn verify_proof<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circuit: 
   let last_index = circuit.gates.len()-1;
   for i in 0..circuit.gates.len(){
     // follows order of transcript call to ensure it gets the same challenges as prover
+    // so alpha and beta are fetched before verify_partial_proof is called even though they aren't used
     let alpha = F::from_be_bytes_mod_order(&transcript.squeeze());
     let beta = F::from_be_bytes_mod_order(&transcript.squeeze());    
 
@@ -146,7 +145,7 @@ fn verify_proof<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circuit: 
     if sum != evaluated_sum {
       return false;
     }
-    dbg!(sum, evaluated_sum);
+
     challenges = new_challenges;
   }
 
