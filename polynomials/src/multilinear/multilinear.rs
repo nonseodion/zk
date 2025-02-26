@@ -79,16 +79,18 @@ impl <F: PrimeField>MultiLinear<F> {
   }
 
   pub fn evaluate(&self, values: &Vec<Option<F>>) -> MultiLinear<F> {
-      if 2_usize.pow(values.len() as u32) != self.hypercube.len() {
+    // The values 
+      if 2_usize.pow(values.len() as u32) > self.hypercube.len() {
         println!("Polynomial is incorrect");
       }
       let mut hypercube = vec![];
       hypercube.extend( &self.hypercube);
       let mut intermediate_result = MultiLinear::new(&hypercube);
-
+      // log2 of hypercube length gives the number of variables
+      let variable_len = hypercube.len().trailing_zeros() as usize;
       for (i, value) in values.iter().enumerate() {
         intermediate_result = match value {
-          Some(_value) => intermediate_result.partial_evaluate(*_value, values.len() - i - 1),
+          Some(_value) => intermediate_result.partial_evaluate(*_value, variable_len - i - 1),
           None => intermediate_result
         }
       }
@@ -111,7 +113,7 @@ pub fn blow_up_left<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> MultiLi
 }
 
 fn get_blow_up_poly<F: PrimeField>(poly: &MultiLinear<F>, blows: u32) -> Vec<F>{
-  if poly.hypercube.len() % 2 != 0 {panic!("poly length is not a multiple of 2")};
+  if poly.hypercube.len() % 2 != 0 && poly.hypercube.len() != 1  {panic!("poly length is not a multiple of 2")};
   let new_variable_len = 1 << (poly.hypercube.len().trailing_zeros() + blows);
   vec![F::zero(); new_variable_len as usize]
 }
