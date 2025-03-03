@@ -1,2 +1,2 @@
 [workspace]
-members = [ "gkr","polynomials", "shamir_secret_sharing", "sumcheck"]
+members = [ "gkr", "multilinear-kzg","polynomials", "shamir_secret_sharing", "sumcheck"]
