@@ -17,7 +17,7 @@ struct GKR_PROOF<F: PrimeField> {
 }
 
 fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circuit: &mut Circuit<F>, inputs: &Vec<F>, transcript: &mut T) -> GKR_PROOF<F> {
-  circuit.evaluate(inputs);
+  let layer_evaluations = circuit.evaluate(inputs);
   let mut gkr_proof = GKR_PROOF{
     claimed_sums: vec![],
     round_polys: vec![],
@@ -28,7 +28,7 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
   let mut add_and_muls = vec![];
   get_add_and_muls(&circuit, &mut add_and_muls);
 
-  let mut _w = circuit.layers[0].clone();
+  let mut _w = layer_evaluations[0].clone();
 
   if _w.len() == 1 { _w = vec![_w[0], F::zero()]; }
   let w_i = MultiLinear::new(&_w);
@@ -41,7 +41,7 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
   for i in 0..circuit.gates.len() {
     let (mut add_poly, mut mul_poly) = add_and_muls[i].clone();
     
-    let w_i_plus_1 = MultiLinear::new(&circuit.layers[i+1]);
+    let w_i_plus_1 = MultiLinear::new(&layer_evaluations[i+1]);
     let blows = next_pow_of_2(w_i_plus_1.hypercube.len()) as u32;
     // blow ups
     let w_b = blow_up_right(&w_i_plus_1, blows); // blow up for c
@@ -85,7 +85,7 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
     gkr_proof.evaluations.push((w_b_eval, w_c_eval));
   }
 
-  gkr_proof.output = circuit.layers[0].clone();
+  gkr_proof.output = layer_evaluations[0].clone();
 
   gkr_proof
 }
@@ -318,6 +318,7 @@ mod test {
     
     hasher = Keccak256::new();
     transcript = Transcript::new(hasher);
+
     assert_eq!(
       true, 
       verify_proof(&mut circuit, &inputs, &mut transcript, gkr_proof)

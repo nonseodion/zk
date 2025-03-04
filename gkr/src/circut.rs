@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use ark_ff::PrimeField;
 
 #[derive(Debug)]
@@ -24,13 +26,13 @@ impl Gate {
 
 #[derive(Debug)]
 pub(crate) struct Circuit<F: PrimeField> {
-  pub(crate) layers: Vec<Vec<F>>,
-  pub(crate) gates: Vec<Vec<Gate>>
+  pub(crate) gates: Vec<Vec<Gate>>,
+  _phantom: PhantomData<F>
 }
 
 impl <F: PrimeField> Circuit<F> {
   pub(crate) fn new(gates: Vec<Vec<Gate>>) -> Self{
-    Circuit { layers: vec![], gates }
+    Circuit{ gates, _phantom: PhantomData }
   }
 
   pub(crate) fn evaluate(&mut self, inputs: &Vec<F>) -> Vec<Vec<F>> {
@@ -59,7 +61,6 @@ impl <F: PrimeField> Circuit<F> {
 
     // push last output
     layer_values[0] = inputs;
-    self.layers = layer_values.clone();
     return layer_values;
   }
 }
@@ -84,7 +85,7 @@ mod test {
       ]
     ];
 
-    let mut circuit: Circuit<Fq> = Circuit::new(
+    let mut circuit = Circuit::new(
       gates
     );
 
@@ -112,7 +113,7 @@ mod test {
       ]
     ];
 
-    let mut circuit: Circuit<Fq> = Circuit::new(
+    let mut circuit = Circuit::new(
       gates
     );
 
