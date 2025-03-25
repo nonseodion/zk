@@ -1,3 +1,2 @@
-mod multilinear_kzg;
-mod multilinear_kzg_prime;
-mod trusted_setup;
+pub mod multilinear_kzg;
+pub mod trusted_setup;

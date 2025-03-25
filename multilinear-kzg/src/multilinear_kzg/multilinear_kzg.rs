@@ -6,10 +6,9 @@ use ark_ec::{
 };
 use ark_ff::{BigInteger, PrimeField};
 use polynomials::multilinear::multilinear::{blow_up_left, MultiLinear};
-use std::ops::Mul;
-use crate::trusted_setup::generate_encrypted_lagrange_bases;
+use crate::trusted_setup::trusted_setup::generate_encrypted_lagrange_bases;
 
-fn commit<F: PrimeField, P: Pairing>(
+pub fn commit<F: PrimeField, P: Pairing>(
     poly: &MultiLinear<F>,
     encrypted_lagrange_bases_g1: &Vec<P::G1>,
 ) -> P::G1 {
@@ -20,10 +19,10 @@ fn commit<F: PrimeField, P: Pairing>(
         .sum()
 }
 
-fn open<F: PrimeField, P: Pairing>(
+pub fn open<F: PrimeField, P: Pairing>(
     poly: &MultiLinear<F>,
-    encrypted_lagrange_bases: Vec<P::G1>,
-    values: Vec<F>,
+    encrypted_lagrange_bases: &Vec<P::G1>,
+    values: &Vec<F>,
 ) -> (F, Vec<P::G1>) {
     let result = poly
         .evaluate(&values.iter().map(|x| Some(*x)).collect())
@@ -68,12 +67,12 @@ fn open<F: PrimeField, P: Pairing>(
 }
 
 // the proof is the array of quotients
-fn verify_proof<F: PrimeField, P: Pairing>(
+pub fn verify_proof<F: PrimeField, P: Pairing>(
     result: F,
     commitment: P::G1,
-    proofs: Vec<P::G1>,
-    encrypted_taus: Vec<P::G2>,
-    values: Vec<F>,
+    proofs: &Vec<P::G1>,
+    encrypted_taus: &Vec<P::G2>,
+    values: &Vec<F>,
 ) -> bool {
     let rhs = proofs
         .iter()
@@ -117,7 +116,7 @@ mod test {
         // values to open proof
         let values = vec![Fr::from(6), Fr::from(4), Fr::from(0)];
         let (result, quotients) =
-            open::<Fr, Bls12_381>(&poly, encrypted_lagrange_bases_g1, values.clone());
+            open::<Fr, Bls12_381>(&poly, &encrypted_lagrange_bases_g1, &values);
 
         let encrypted_taus = taus
             .iter()
@@ -125,7 +124,7 @@ mod test {
             .collect();
 
         assert_eq!(
-            verify_proof::<Fr, Bls12_381>(result, commitment, quotients, encrypted_taus, values),
+            verify_proof::<Fr, Bls12_381>(result, commitment, &quotients, &encrypted_taus, &values),
             true
         );
     }

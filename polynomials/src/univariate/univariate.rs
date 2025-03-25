@@ -83,6 +83,8 @@ pub fn interpolate<F: PrimeField>(points: &Vec<(F, F)>) -> UnivariatePolynomial<
 pub fn evaluate<F: PrimeField>(polynomial: &UnivariatePolynomial<F>, x_value: F) -> F {
     let mut result: F = F::zero();
     let length = polynomial.coefficients.len();
+    // Horner's rule
+    // a_0 + x(a_1 + x(a_2 + ... x(a_n-1 + x(a_n)) ... ))
     for i in 0..(length - 1 ) {
         result = (result + polynomial.coefficients[length-i-1]) * x_value
     }

@@ -2,7 +2,7 @@ use ark_ff::PrimeField;
 use ark_ec::pairing::Pairing;
 use ark_ec::{PrimeGroup};
 
-pub(crate) fn generate_encrypted_lagrange_bases<F: PrimeField, P: Pairing>(taus: &Vec<F>) -> Vec<P::G1>{
+pub fn generate_encrypted_lagrange_bases<F: PrimeField, P: Pairing>(taus: &Vec<F>) -> Vec<P::G1>{
     let mut lagrange_bases = vec![F::ONE];
 
     for (index, tau) in taus.iter().rev().enumerate() {

@@ -1,24 +1,53 @@
 use std::cmp::max;
+use std::hash::Hash;
 
 use polynomials::multilinear::composite::{Composite, OP as COMPOSITE_OP};
 use polynomials::multilinear::multilinear::{MultiLinear, blow_up_left, blow_up_right, scalar_mul};
-use ark_ff::PrimeField;
+use ark_ff::{ biginteger::BigInteger, PrimeField};
 use crate::circut::{ Circuit, OP as CIRCUIT_OP, Gate};
 use sumcheck::transcipt::transcript::{ HashWrapper, TranscriptTrait, Transcript};
+
 use sumcheck::sumcheck::sumcheck::{add_data_to_transcript, generate_partial_proof, verify_partial_proof};
-use polynomials::univariate::univariate::{evaluate, interpolate };
+use ark_ec::{
+    pairing::Pairing,
+    AdditiveGroup
+};
+use multilinear_kzg::multilinear_kzg::multilinear_kzg::{commit, open, verify_proof as verify_kzg_proof};
 
 #[derive(Debug)]
-struct GKR_PROOF<F: PrimeField> {
+struct KZG_PROOF<P: Pairing> {
+  commitment: P::G1,
+  b_quotients: Vec<P::G1>,
+  c_quotients: Vec<P::G1>,
+}
+
+#[derive(Debug)]
+struct GKR_PROOF<P: Pairing, F: PrimeField> {
+  kzg_proof: KZG_PROOF<P>,
   claimed_sums: Vec<F>,
   round_polys: Vec<Vec<Vec<F>>>,
   evaluations: Vec<(F, F)>,
   output: Vec<F>
 }
 
-fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circuit: &mut Circuit<F>, inputs: &Vec<F>, transcript: &mut T) -> GKR_PROOF<F> {
+fn generate_proof <F: PrimeField, P:Pairing, H: HashWrapper, T: TranscriptTrait<H>> (
+  circuit: &mut Circuit<F>, 
+  inputs: &Vec<F>, 
+  transcript: &mut T,
+  encrypted_lagrange_bases: &Vec<P::G1>
+) -> GKR_PROOF<P, F> {
   let layer_evaluations = circuit.evaluate(inputs);
+  let mut kzg_proof = KZG_PROOF{ 
+    commitment: P::G1::ZERO,
+    b_quotients: vec![],
+    c_quotients: vec![]
+  };
+  let commitment = commit::<F, P>(&MultiLinear::new(inputs), encrypted_lagrange_bases);
+  transcript.absorb(&commitment.to_string().as_bytes().to_vec());
+  kzg_proof.commitment = commitment;
+
   let mut gkr_proof = GKR_PROOF{
+    kzg_proof,
     claimed_sums: vec![],
     round_polys: vec![],
     evaluations: vec![],
@@ -74,9 +103,18 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
     challenges = vec![];
     // returns challenges and initial claimed sum
     let sum = generate_partial_proof(&f_poly, transcript, &mut round_polys, &mut challenges);
+    let (w_b_eval, w_c_eval);
+    let b_challenges = challenges.iter().take(blows as usize).map(|x| *x).collect();
+    let c_challenges = challenges.iter().skip(blows as usize).map(|x| *x).collect();
 
-    let w_b_eval = w_i_plus_1.evaluate(&challenges.iter().take(blows as usize).map(|x| Some(*x)).collect()).hypercube[0];
-    let w_c_eval = w_i_plus_1.evaluate(&challenges.iter().skip(blows as usize).map(|x| Some(*x)).collect()).hypercube[0];
+    if i == circuit.gates.len()-1 {
+      // last_layer compute kzg proofs
+      (w_b_eval, gkr_proof.kzg_proof.b_quotients) = open::<F, P>(&w_i_plus_1, encrypted_lagrange_bases, &b_challenges);
+      (w_c_eval, gkr_proof.kzg_proof.c_quotients) = open::<F, P>(&w_i_plus_1, encrypted_lagrange_bases, &c_challenges);
+    } else {
+      w_b_eval = w_i_plus_1.evaluate(&b_challenges.iter().map(|x| Some(*x)).collect()).hypercube[0];
+      w_c_eval = w_i_plus_1.evaluate(&c_challenges.iter().map(|x| Some(*x)).collect()).hypercube[0];      
+    }
     
     add_data_to_transcript(&vec![w_b_eval, w_c_eval], transcript);
 
@@ -90,8 +128,13 @@ fn generate_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circui
   gkr_proof
 }
 
-fn verify_proof<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circuit: &mut Circuit<F>, inputs: &Vec<F>, transcript: &mut T, gkr_proof: GKR_PROOF<F>) -> bool {
-
+fn verify_proof<F: PrimeField, P: Pairing, H: HashWrapper, T: TranscriptTrait<H>> (
+  circuit: &mut Circuit<F>, 
+  encrypted_taus: &Vec<P::G2>, 
+  transcript: &mut T, 
+  gkr_proof: GKR_PROOF<P, F>
+) -> bool {
+  transcript.absorb(&gkr_proof.kzg_proof.commitment.to_string().as_bytes().to_vec());
   let mut add_and_muls = vec![];
   get_add_and_muls(&circuit, &mut add_and_muls);
 
@@ -129,12 +172,17 @@ fn verify_proof<F: PrimeField, H: HashWrapper, T: TranscriptTrait<H>> (circuit: 
       (w_plus , w_mul) = (w_b_eval + w_c_eval, w_b_eval * w_c_eval);
     } else {
       // last layer 
-      let w_inputs = MultiLinear::new(&inputs);
       let challenges_len = new_challenges.len() / 2;
-      let b_challenges = new_challenges.iter().take(challenges_len).map(|x| Some(*x)).collect();
-      let c_challenges = new_challenges.iter().skip(challenges_len).take(challenges_len).map(|x| Some(*x)).collect();
-      w_b_eval = w_inputs.evaluate(&b_challenges).hypercube[0];
-      w_c_eval = w_inputs.evaluate(&c_challenges).hypercube[0];
+      let b_challenges = new_challenges.iter().take(challenges_len).map(|x| *x).collect();
+      let c_challenges = new_challenges.iter().skip(challenges_len).take(challenges_len).map(|x| *x).collect();
+      (w_b_eval, w_c_eval) = evaluations[i];
+      // verify results using kzg proofs
+      let commitment = gkr_proof.kzg_proof.commitment;
+      let (check1, check2) = (
+        verify_kzg_proof::<F,P>(w_b_eval, commitment, &gkr_proof.kzg_proof.b_quotients, encrypted_taus, &b_challenges),
+        verify_kzg_proof::<F,P>(w_c_eval, commitment, &gkr_proof.kzg_proof.c_quotients, encrypted_taus, &c_challenges)
+      );
+      if !check1 || !check2 {return false;}
       (w_plus, w_mul) = (w_b_eval + w_c_eval, w_b_eval * w_c_eval);
     }
 
@@ -229,8 +277,10 @@ fn apply_alpha_beta <F: PrimeField> (alpha: F, beta: F, challenges: &Vec<F>, for
 #[cfg(test)]
 mod test {
   use super::*;
-  use ark_bn254::Fq;
-  use sha3::{Keccak256, Digest};  
+  use multilinear_kzg::trusted_setup::trusted_setup::generate_encrypted_lagrange_bases;
+  use sha3::{Keccak256, Digest}; 
+  use ark_bls12_381::{Bls12_381, G2Affine, Fr};
+  use ark_ec::AffineRepr;
 
   #[test]
   fn test_get_add_and_muls() {
@@ -245,45 +295,45 @@ mod test {
       ]
     ];
 
-    let mut circuit: Circuit<Fq> = Circuit::new(
+    let mut circuit: Circuit<Fr> = Circuit::new(
       gates
     );
 
-    let inputs: Vec<Fq> = vec![ 1, 2, 3, 4 ].iter().map(|x| Fq::from(*x)).collect();
+    let inputs: Vec<Fr> = vec![ 1, 2, 3, 4 ].iter().map(|x| Fr::from(*x)).collect();
     let mut add_and_muls = vec![];
     get_add_and_muls(&circuit, &mut add_and_muls);
 
     assert_eq!(
       add_and_muls[0].0.hypercube,
-      vec![ 0, 1, 0, 0, 0, 0, 0, 0].iter().map(|x| Fq::from(*x as u64)).collect::<Vec<Fq>>()
+      vec![ 0, 1, 0, 0, 0, 0, 0, 0].iter().map(|x| Fr::from(*x as u64)).collect::<Vec<Fr>>()
     );
 
     assert_eq!(
       add_and_muls[0].1.hypercube,
-      vec![ 0, 0, 0, 0, 0, 0, 0, 0].iter().map(|x| Fq::from(*x as u64)).collect::<Vec<Fq>>()
+      vec![ 0, 0, 0, 0, 0, 0, 0, 0].iter().map(|x| Fr::from(*x as u64)).collect::<Vec<Fr>>()
     );
 
     assert_eq!(
       add_and_muls[1].0.hypercube,
-      vec![ 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ].iter().map(|x| Fq::from(*x as u64)).collect::<Vec<Fq>>()
+      vec![ 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ].iter().map(|x| Fr::from(*x as u64)).collect::<Vec<Fr>>()
     );
 
     assert_eq!(
       add_and_muls[1].1.hypercube,
-      vec![ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,].iter().map(|x| Fq::from(*x as u64)).collect::<Vec<Fq>>()
+      vec![ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,].iter().map(|x| Fr::from(*x as u64)).collect::<Vec<Fr>>()
     );
   }
 
   // 4b + 2a
   #[test]
   fn test_apply_alpha_beta() {
-    let poly = MultiLinear::new(&vec![0, 4, 3, 7, 2, 6, 5, 9].iter().map(|x| Fq::from(*x)).collect());
-    let new_poly: MultiLinear<Fq> = 
-      apply_alpha_beta(Fq::from(2), Fq::from(3), &vec![Fq::from(2), Fq::from(3)], &poly);
+    let poly = MultiLinear::new(&vec![0, 4, 3, 7, 2, 6, 5, 9].iter().map(|x| Fr::from(*x)).collect());
+    let new_poly: MultiLinear<Fr> = 
+      apply_alpha_beta(Fr::from(2), Fr::from(3), &vec![Fr::from(2), Fr::from(3)], &poly);
 
     assert_eq!(
       new_poly.hypercube,
-      vec![26, 46, 41, 61].iter().map(|x| Fq::from(*x)).collect::<Vec<Fq>>()
+      vec![26, 46, 41, 61].iter().map(|x| Fr::from(*x)).collect::<Vec<Fr>>()
     )
   }
 
@@ -306,22 +356,29 @@ mod test {
       ]
     ];
 
-    let mut circuit: Circuit<Fq> = Circuit::new(
+    let mut circuit: Circuit<Fr> = Circuit::new(
       gates
     );
 
-    let inputs: Vec<Fq> = vec![ 1, 2, 3, 4, 5, 6, 7, 8 ].iter().map(|x| Fq::from(*x)).collect();
+    let inputs: Vec<Fr> = vec![ 1, 2, 3, 4, 5, 6, 7, 8 ].iter().map(|x| Fr::from(*x)).collect();
+
+    let taus = vec![Fr::from(5), Fr::from(2), Fr::from(3)];
+    let encrypted_lagrange_bases = generate_encrypted_lagrange_bases::<Fr, Bls12_381>(&taus);    
+    let encrypted_taus = taus
+        .iter()
+        .map(|x| G2Affine::generator().mul_bigint(x.into_bigint()))
+        .collect();    
     
     let mut hasher = Keccak256::new();
     let mut transcript = Transcript::new(hasher);    
-    let gkr_proof = generate_proof(&mut circuit, &inputs, &mut transcript);
+    let gkr_proof: GKR_PROOF<Bls12_381, Fr> = generate_proof(&mut circuit, &inputs, &mut transcript, &encrypted_lagrange_bases);
     
     hasher = Keccak256::new();
     transcript = Transcript::new(hasher);
 
     assert_eq!(
       true, 
-      verify_proof(&mut circuit, &inputs, &mut transcript, gkr_proof)
+      verify_proof(&mut circuit, &encrypted_taus, &mut transcript, gkr_proof)
     );
   }
 }

@@ -1,4 +1,5 @@
 use ark_ff::PrimeField;
+use ark_ff::field_hashers::HashToField;
 use std::fmt::Debug;
 use std::iter::repeat_n;
 use std::marker::Copy; // TODO: implement copy
