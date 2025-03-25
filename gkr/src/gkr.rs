@@ -14,6 +14,8 @@ use ark_ec::{
 };
 use multilinear_kzg::multilinear_kzg::multilinear_kzg::{commit, open, verify_proof as verify_kzg_proof};
 
+use field_tracker::print_summary;
+
 #[derive(Debug)]
 struct KZG_PROOF<P: Pairing> {
   commitment: P::G1,
@@ -67,16 +69,25 @@ fn generate_proof <F: PrimeField, P:Pairing, H: HashWrapper, T: TranscriptTrait<
   add_data_to_transcript(&w_i.hypercube, transcript);
   challenges = challenges.iter().map(|_| F::from_be_bytes_mod_order(&transcript.squeeze())).collect();
 
+  print_summary!();
+
   for i in 0..circuit.gates.len() {
     let (mut add_poly, mut mul_poly) = add_and_muls[i].clone();
     
     let w_i_plus_1 = MultiLinear::new(&layer_evaluations[i+1]);
     let blows = next_pow_of_2(w_i_plus_1.hypercube.len()) as u32;
     // blow ups
+
+    // println!("First {:?}", i);
+    // print_summary!(); 
+
     let w_b = blow_up_right(&w_i_plus_1, blows); // blow up for c
     let w_c = blow_up_left(&w_i_plus_1, blows); // blow up for b
     let w_plus = MultiLinear::new(&w_b.hypercube) + MultiLinear::new(&w_c.hypercube);
     let w_mul = MultiLinear::new(&w_b.hypercube) * MultiLinear::new(&w_c.hypercube);
+
+    // println!("Second {:?}", i);
+    // print_summary!();     
 
     if i != 0 {    
       let alpha = F::from_be_bytes_mod_order(&transcript.squeeze());
@@ -87,6 +98,9 @@ fn generate_proof <F: PrimeField, P:Pairing, H: HashWrapper, T: TranscriptTrait<
       add_poly = add_poly.evaluate(&challenges.iter().map(|x| Some(*x)).collect());
       mul_poly = mul_poly.evaluate(&challenges.iter().map(|x| Some(*x)).collect());
     }
+
+    // println!("Third {:?}", i);
+    // print_summary!();     
 
     let hypercubes = vec![ 
       add_poly, 
@@ -101,11 +115,19 @@ fn generate_proof <F: PrimeField, P:Pairing, H: HashWrapper, T: TranscriptTrait<
     );
     let mut round_polys = vec![];
     challenges = vec![];
+
+    // println!("Fourth {:?}", i);
+    // print_summary!();
     // returns challenges and initial claimed sum
     let sum = generate_partial_proof(&f_poly, transcript, &mut round_polys, &mut challenges);
     let (w_b_eval, w_c_eval);
+    // println!("Fifth {:?}", i);
+    // print_summary!();    
     let b_challenges = challenges.iter().take(blows as usize).map(|x| *x).collect();
     let c_challenges = challenges.iter().skip(blows as usize).map(|x| *x).collect();
+    
+    // println!("{:?}", i);
+    // print_summary!(); 
 
     if i == circuit.gates.len()-1 {
       // last_layer compute kzg proofs
@@ -114,13 +136,14 @@ fn generate_proof <F: PrimeField, P:Pairing, H: HashWrapper, T: TranscriptTrait<
     } else {
       w_b_eval = w_i_plus_1.evaluate(&b_challenges.iter().map(|x| Some(*x)).collect()).hypercube[0];
       w_c_eval = w_i_plus_1.evaluate(&c_challenges.iter().map(|x| Some(*x)).collect()).hypercube[0];      
-    }
+    }   
     
     add_data_to_transcript(&vec![w_b_eval, w_c_eval], transcript);
 
     gkr_proof.claimed_sums.push(sum);
     gkr_proof.round_polys.push(round_polys);
     gkr_proof.evaluations.push((w_b_eval, w_c_eval));
+
   }
 
   gkr_proof.output = layer_evaluations[0].clone();
@@ -281,6 +304,7 @@ mod test {
   use sha3::{Keccak256, Digest}; 
   use ark_bls12_381::{Bls12_381, G2Affine, Fr};
   use ark_ec::AffineRepr;
+  use field_tracker::{Ft, print_summary};
 
   #[test]
   fn test_get_add_and_muls() {
@@ -339,19 +363,21 @@ mod test {
 
   #[test]
   fn test_generate_proof() {
+
+    type Fr = Ft!(ark_bls12_381::Fr);
     let gates = vec![
       // layer 1
       vec![
-        Gate::new(0, 1, CIRCUIT_OP::MUL, 0),
+        Gate::new(0, 1, CIRCUIT_OP::ADD, 0),
       ],   
       vec![
         Gate::new(0, 1, CIRCUIT_OP::ADD, 0),
-        Gate::new(2, 3, CIRCUIT_OP::MUL, 1),        
+        Gate::new(2, 3, CIRCUIT_OP::ADD, 1),        
       ],
       vec![
         Gate::new(0, 1, CIRCUIT_OP::ADD, 0),
-        Gate::new(2, 3, CIRCUIT_OP::MUL, 1),
-        Gate::new(4, 5, CIRCUIT_OP::MUL, 2),
+        Gate::new(2, 3, CIRCUIT_OP::ADD, 1),
+        Gate::new(4, 5, CIRCUIT_OP::ADD, 2),
         Gate::new(6, 7, CIRCUIT_OP::ADD, 3)      
       ]
     ];
@@ -372,7 +398,8 @@ mod test {
     let mut hasher = Keccak256::new();
     let mut transcript = Transcript::new(hasher);    
     let gkr_proof: GKR_PROOF<Bls12_381, Fr> = generate_proof(&mut circuit, &inputs, &mut transcript, &encrypted_lagrange_bases);
-    
+    print_summary!();
+
     hasher = Keccak256::new();
     transcript = Transcript::new(hasher);
 
@@ -380,5 +407,7 @@ mod test {
       true, 
       verify_proof(&mut circuit, &encrypted_taus, &mut transcript, gkr_proof)
     );
+
+    // print_summary!();
   }
 }

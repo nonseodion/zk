@@ -5,6 +5,7 @@ use polynomials::univariate::univariate::{evaluate, interpolate, UnivariatePolyn
 use crate::transcipt::transcript::{HashWrapper, TranscriptTrait, Transcript};
 
 use std::iter::repeat_n;
+use field_tracker::{start_tscope, end_tscope};
 
 // Sumcheck protocol generates a proof to show that the sum of the polynomial 
 // over the boolean hypercube is a particular value,
@@ -15,8 +16,10 @@ pub fn generate_partial_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait
     let rounds = main_poly.polys[0].hypercube.len().trailing_zeros() as usize; // this is the number of variables
     let mut sum= F::zero();
     let mut sums = vec![];
+  
 
     for i in 0..rounds {
+    start_tscope!("Sumcheck");
         let mut reduced_poly = main_poly.reduce();
         let extra_points = reduced_poly.hypercube.len()/2;
         let mut index = 0;
@@ -36,6 +39,9 @@ pub fn generate_partial_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait
             index += 1;
         });
 
+    end_tscope!();
+              
+
         let mut round_poly = vec![];
         for j in 0..(degree + 1) {
             round_poly.push(reduced_poly.hypercube.iter().skip(j * extra_points).take(extra_points).sum());
@@ -48,8 +54,10 @@ pub fn generate_partial_proof <F: PrimeField, H: HashWrapper, T: TranscriptTrait
         let challenge = add_data_to_transcript(&data, transcript);
         challenges.push(challenge);
         main_poly = main_poly.partialEvaluate(challenge, rounds - i - 1);
-        round_polys.push(round_poly);
+        round_polys.push(round_poly);     
     }
+
+     
 
 
     sums[0]
@@ -163,14 +171,13 @@ pub fn add_data_to_transcript <F: PrimeField, H: HashWrapper, T: TranscriptTrait
 }
 
 
-
-
 #[cfg(test)]
 mod test {
     // use super::
     use super::*;
     use ark_bn254::Fq;
     use sha3::{Keccak256, Digest};
+    use field_tracker::{Ft, print_summary};
 
     #[test]
     fn test_generate_proof(){
@@ -198,7 +205,25 @@ mod test {
     }
 
     #[test]
+    fn test_generate_proof_benchmark(){
+        type Fq = Ft!(ark_bn254::Fq);
+        let evals = vec![Fq::from(0); 1<<20];
+        let polynomial = MultiLinear::new(&evals);
+
+        let hasher = Keccak256::new();
+        let mut transcript = Transcript::new(hasher);
+        let mut round_polys = vec![];
+        let sum = generate_proof(&polynomial, &mut transcript, &mut round_polys);
+
+        transcript = Transcript::new(Keccak256::new());
+
+        assert_eq!(verify_proof(&polynomial, &round_polys, sum, &mut transcript), true);        
+        print_summary!();
+    }
+
+    #[test]
     fn test_generate_partial_proof() {
+        type Fq = Ft!(ark_bn254::Fq);        
         // 2a + 3
         let mut poly_a = MultiLinear::new(&vec![3, 5].iter().map(|x| Fq::from(*x)).collect());
         poly_a = blow_up_right(&poly_a, 2);
