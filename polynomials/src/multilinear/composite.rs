@@ -1,7 +1,7 @@
 use core::panic;
 
 use ark_ff::PrimeField;
-use crate::multilinear::multilinear::MultiLinear;
+use crate::multilinear::MultiLinear;
 use std::ops::{Add, Mul};
 
 // this is limited to work with 

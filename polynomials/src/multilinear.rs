@@ -6,6 +6,8 @@ use std::marker::Copy; // TODO: implement copy
 use std::clone::Clone;
 use std::ops::{Add, Mul};
 
+pub mod composite;
+
 #[derive(Debug, Clone)]
 pub struct MultiLinear<F: PrimeField> {
   pub hypercube: Vec<F>, // result from evaluating the boolean hypercube

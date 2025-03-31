@@ -2,19 +2,19 @@ use std::cmp::max;
 use std::hash::Hash;
 
 use polynomials::multilinear::composite::{Composite, OP as COMPOSITE_OP};
-use polynomials::multilinear::multilinear::{MultiLinear, blow_up_left, blow_up_right, scalar_mul};
+use polynomials::multilinear::{MultiLinear, blow_up_left, blow_up_right, scalar_mul};
 use ark_ff::{ biginteger::BigInteger, PrimeField};
 use crate::circut::{ Circuit, OP as CIRCUIT_OP, Gate};
-use sumcheck::transcipt::transcript::{ HashWrapper, TranscriptTrait, Transcript};
+use sumcheck::transcript::{ HashWrapper, TranscriptTrait, Transcript};
 
-use sumcheck::sumcheck::sumcheck::{add_data_to_transcript, generate_partial_proof, verify_partial_proof};
+use sumcheck::{add_data_to_transcript, generate_partial_proof, verify_partial_proof};
 use ark_ec::{
     pairing::Pairing,
     AdditiveGroup
 };
-use multilinear_kzg::multilinear_kzg::multilinear_kzg::{commit, open, verify_proof as verify_kzg_proof};
+use multilinear_kzg::{commit, open, verify_proof as verify_kzg_proof};
 
-use field_tracker::print_summary;
+// use field_tracker::print_summary;
 
 #[derive(Debug)]
 struct KZG_PROOF<P: Pairing> {
@@ -69,7 +69,7 @@ fn generate_proof <F: PrimeField, P:Pairing, H: HashWrapper, T: TranscriptTrait<
   add_data_to_transcript(&w_i.hypercube, transcript);
   challenges = challenges.iter().map(|_| F::from_be_bytes_mod_order(&transcript.squeeze())).collect();
 
-  print_summary!();
+  // print_summary!();
 
   for i in 0..circuit.gates.len() {
     let (mut add_poly, mut mul_poly) = add_and_muls[i].clone();
@@ -300,11 +300,11 @@ fn apply_alpha_beta <F: PrimeField> (alpha: F, beta: F, challenges: &Vec<F>, for
 #[cfg(test)]
 mod test {
   use super::*;
-  use multilinear_kzg::trusted_setup::trusted_setup::generate_encrypted_lagrange_bases;
+  use multilinear_kzg::trusted_setup::generate_encrypted_lagrange_bases;
   use sha3::{Keccak256, Digest}; 
   use ark_bls12_381::{Bls12_381, G2Affine, Fr};
   use ark_ec::AffineRepr;
-  use field_tracker::{Ft, print_summary};
+  // use field_tracker::{Ft, print_summary};
 
   #[test]
   fn test_get_add_and_muls() {
@@ -364,7 +364,7 @@ mod test {
   #[test]
   fn test_generate_proof() {
 
-    type Fr = Ft!(ark_bls12_381::Fr);
+    // type Fr = Ft!(ark_bls12_381::Fr);
     let gates = vec![
       // layer 1
       vec![
@@ -398,7 +398,7 @@ mod test {
     let mut hasher = Keccak256::new();
     let mut transcript = Transcript::new(hasher);    
     let gkr_proof: GKR_PROOF<Bls12_381, Fr> = generate_proof(&mut circuit, &inputs, &mut transcript, &encrypted_lagrange_bases);
-    print_summary!();
+    // print_summary!();
 
     hasher = Keccak256::new();
     transcript = Transcript::new(hasher);

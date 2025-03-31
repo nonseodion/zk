@@ -1,5 +1,5 @@
 use ark_ff::PrimeField;
-use polynomials::univariate::univariate::{UnivariatePolynomial, interpolate, evaluate};
+use polynomials::univariate::{UnivariatePolynomial, interpolate, evaluate};
 use rand::{thread_rng, Rng};
 
 // This file implements the Shamir Secret Sharing protocol.
